@@ -25,6 +25,19 @@ from datasets import build_dataset, get_coco_api_from_dataset
 from engine import evaluate, train_one_epoch
 from models import build_model
 
+'''
+Namespace(aux_loss=True, backbone='resnet50', batch_size=2, bbox_loss_coef=5, cache_mode=False, clip_max_norm=0.1, 
+cls_loss_coef=2, coco_panoptic_path=None, coco_path='./data/coco', dataset_file='coco', dec_layers=6, dec_n_points=4, 
+device='cuda', dice_loss_coef=1, dilation=False, dim_feedforward=1024, distributed=False, dropout=0.1, enc_layers=6, 
+enc_n_points=4, epochs=50, eval=False, focal_alpha=0.25, frozen_weights=None, giou_loss_coef=2, hidden_dim=256, 
+lr=0.0002, lr_backbone=2e-05, lr_backbone_names=['backbone.0'], lr_drop=40, lr_drop_epochs=None, 
+lr_linear_proj_mult=0.1, lr_linear_proj_names=['reference_points', 'sampling_offsets'], mask_loss_coef=1, 
+masks=False, nheads=8, num_feature_levels=4, num_queries=300, num_workers=2, output_dir='', position_embedding='sine', 
+position_embedding_scale=6.283185307179586, remove_difficult=False, resume='', seed=42, set_cost_bbox=5, 
+set_cost_class=2, set_cost_giou=2, sgd=False, start_epoch=0, two_stage=False, weight_decay=0.0001, 
+with_box_refine=False)
+'''
+
 
 def get_args_parser():
     parser = argparse.ArgumentParser('Deformable DETR Detector', add_help=False)

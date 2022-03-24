@@ -34,7 +34,7 @@ def _get_clones(module, N):
 
 class DeformableDETR(nn.Module):
     """ This is the Deformable DETR module that performs object detection """
-    def __init__(self, backbone, transformer, num_classes, num_queries, num_feature_levels,
+    def __init__(self, backbone, transformer, num_classes, num_queries=300, num_feature_levels=4,
                  aux_loss=True, with_box_refine=False, two_stage=False):
         """ Initializes the model.
         Parameters:
@@ -42,7 +42,7 @@ class DeformableDETR(nn.Module):
             transformer: torch module of the transformer architecture. See transformer.py
             num_classes: number of object classes
             num_queries: number of object queries, ie detection slot. This is the maximal number of objects
-                         DETR can detect in a single image. For COCO, we recommend 100 queries.
+                         DETR can detect in a single image.
             aux_loss: True if auxiliary decoding losses (loss at each decoder layer) are to be used.
             with_box_refine: iterative bounding box refinement
             two_stage: two-stage Deformable DETR
@@ -129,6 +129,11 @@ class DeformableDETR(nn.Module):
         if not isinstance(samples, NestedTensor):
             samples = nested_tensor_from_tensor_list(samples)
         features, pos = self.backbone(samples)
+        # features: list of NestedTensor
+        # features[i].tensors: shape=[B, Ci, Hi, Wi]; Ci: 512/1024/2048
+        # features[i].mask: shape=[B, Hi, Wi]
+        # pos: list of Tensor
+        # pos[i]: shape=[B, 256, Hi, Wi]; positional embedding for each stage
 
         srcs = []
         masks = []
@@ -137,6 +142,11 @@ class DeformableDETR(nn.Module):
             srcs.append(self.input_proj[l](src))
             masks.append(mask)
             assert mask is not None
+        # srcs: list of Tensor; len(srcs) == num_backbone_outs
+        # srcs[i]: shape=[B, 256, Hi, Wi]
+        # masks: list of Tensor; len(masks) == num_backbone_outs
+        # masks[i]: shape=[B, Hi, Wi]
+
         if self.num_feature_levels > len(srcs):
             _len_srcs = len(srcs)
             for l in range(_len_srcs, self.num_feature_levels):
@@ -150,11 +160,21 @@ class DeformableDETR(nn.Module):
                 srcs.append(src)
                 masks.append(mask)
                 pos.append(pos_l)
+        # srcs: list of Tensor; len(srcs) == num_feature_levels
+        # srcs[i]: shape=[B, 256, Hi, Wi]
+        # masks: list of Tensor; len(masks) == num_feature_levels
+        # masks[i]: shape=[B, Hi, Wi]
+        # pos: list of Tensor; len(pos) == num_feature_levels
+        # pos[i]: shape=[B, 256, Hi, Wi]; positional embedding for each stage
 
         query_embeds = None
         if not self.two_stage:
             query_embeds = self.query_embed.weight
         hs, init_reference, inter_references, enc_outputs_class, enc_outputs_coord_unact = self.transformer(srcs, masks, pos, query_embeds)
+        # hs.shape=[num_layers, B, num_queries, 256]
+        # init_reference.shape=[B, num_queries, 2]
+        # inter_references.shape=[num_layers, B, num_queries, 2]
+        # enc_outputs_class, enc_outputs_coord_unact: None
 
         outputs_classes = []
         outputs_coords = []
@@ -176,6 +196,8 @@ class DeformableDETR(nn.Module):
             outputs_coords.append(outputs_coord)
         outputs_class = torch.stack(outputs_classes)
         outputs_coord = torch.stack(outputs_coords)
+        # outputs_class: shape=[num_layers, B, num_queries, 91]
+        # outputs_coord: shape=[num_layers, B, num_queries, 4]
 
         out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1]}
         if self.aux_loss:

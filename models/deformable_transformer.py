@@ -124,6 +124,13 @@ class DeformableTransformer(nn.Module):
         return valid_ratio
 
     def forward(self, srcs, masks, pos_embeds, query_embed=None):
+        """
+            Args:
+                srcs: list of Tensor; len(srcs) == num_feature_levels; srcs[i]: shape=[B, d_model, Hi, Wi]
+                masks: list of Tensor; len(masks) == num_feature_levels; masks[i]: shape=[B, Hi, Wi]
+                pos_embeds: list of Tensor; len(pos) == num_feature_levels; pos[i]: shape=[B, d_model, Hi, Wi];
+                query_embed: shape=[num_queries, d_model * 2]
+        """
         assert self.two_stage or query_embed is not None
 
         # prepare input for encoder
@@ -135,22 +142,26 @@ class DeformableTransformer(nn.Module):
             bs, c, h, w = src.shape
             spatial_shape = (h, w)
             spatial_shapes.append(spatial_shape)
-            src = src.flatten(2).transpose(1, 2)
-            mask = mask.flatten(1)
-            pos_embed = pos_embed.flatten(2).transpose(1, 2)
+            src = src.flatten(2).transpose(1, 2)  # shape=[B, HW, d_model]
+            mask = mask.flatten(1)  # shape=[B, HW]
+            pos_embed = pos_embed.flatten(2).transpose(1, 2)  # shape=[B, HW, d_model]
             lvl_pos_embed = pos_embed + self.level_embed[lvl].view(1, 1, -1)
             lvl_pos_embed_flatten.append(lvl_pos_embed)
             src_flatten.append(src)
             mask_flatten.append(mask)
-        src_flatten = torch.cat(src_flatten, 1)
-        mask_flatten = torch.cat(mask_flatten, 1)
-        lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)
+        src_flatten = torch.cat(src_flatten, 1)  # shape=[B, sum_HW, d_model]
+        mask_flatten = torch.cat(mask_flatten, 1)  # shape=[B, sum_HW]
+        lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)  # shape=[B, sum_HW, d_model]
         spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=src_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1, )), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
+        # spatial_shapes: shape=[num_feature_levels, 2]; 2: (h, w)
+        # level_start_index: shape=[num_feature_levels]; start index of each level; cumsum of Hi * Wi
+        # valid_ratios: shape=[B, num_feature_levels, 2]; 2: (mask_ratio_w, mask_ratio_h)
 
         # encoder
         memory = self.encoder(src_flatten, spatial_shapes, level_start_index, valid_ratios, lvl_pos_embed_flatten, mask_flatten)
+        # memory.shape=[B, sum_HW, d_model]
 
         # prepare input for decoder
         bs, _, c = memory.shape
@@ -171,14 +182,16 @@ class DeformableTransformer(nn.Module):
             query_embed, tgt = torch.split(pos_trans_out, c, dim=2)
         else:
             query_embed, tgt = torch.split(query_embed, c, dim=1)
-            query_embed = query_embed.unsqueeze(0).expand(bs, -1, -1)
-            tgt = tgt.unsqueeze(0).expand(bs, -1, -1)
+            query_embed = query_embed.unsqueeze(0).expand(bs, -1, -1)  # shape=[B, num_queries, d_model]
+            tgt = tgt.unsqueeze(0).expand(bs, -1, -1)  # shape=[B, num_queries, d_model]
             reference_points = self.reference_points(query_embed).sigmoid()
-            init_reference_out = reference_points
+            init_reference_out = reference_points  # [B, num_queries, 2]
 
         # decoder
         hs, inter_references = self.decoder(tgt, reference_points, memory,
                                             spatial_shapes, level_start_index, valid_ratios, query_embed, mask_flatten)
+        # hs.shape=[num_dec_layers, B, num_queries, d_model]
+        # inter_references.shape=[num_dec_layers, B, num_queries, 2]
 
         inter_references_out = inter_references
         if self.two_stage:
@@ -252,6 +265,7 @@ class DeformableTransformerEncoder(nn.Module):
     def forward(self, src, spatial_shapes, level_start_index, valid_ratios, pos=None, padding_mask=None):
         output = src
         reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device=src.device)
+        # reference_points.shape=[B, sum_HW, num_feature_levels, 2]
         for _, layer in enumerate(self.layers):
             output = layer(output, pos, reference_points, spatial_shapes, level_start_index, padding_mask)
 
