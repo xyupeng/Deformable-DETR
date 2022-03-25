@@ -149,12 +149,15 @@ class DeformableTransformer(nn.Module):
             lvl_pos_embed_flatten.append(lvl_pos_embed)
             src_flatten.append(src)
             mask_flatten.append(mask)
-        src_flatten = torch.cat(src_flatten, 1)  # shape=[B, sum_HW, d_model]
-        mask_flatten = torch.cat(mask_flatten, 1)  # shape=[B, sum_HW]
-        lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)  # shape=[B, sum_HW, d_model]
+        src_flatten = torch.cat(src_flatten, 1)
+        mask_flatten = torch.cat(mask_flatten, 1)
+        lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)
         spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=src_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1, )), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
+        # src_flatten: shape=[B, sum_HW, d_model]
+        # mask_flatten: shape=[B, sum_HW]
+        # lvl_pos_embed_flatten: shape=[B, sum_HW, d_model]
         # spatial_shapes: shape=[num_feature_levels, 2]; 2: (h, w)
         # level_start_index: shape=[num_feature_levels]; start index of each level; cumsum of Hi * Wi
         # valid_ratios: shape=[B, num_feature_levels, 2]; 2: (mask_ratio_w, mask_ratio_h)

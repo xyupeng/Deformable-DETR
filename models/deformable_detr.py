@@ -170,7 +170,8 @@ class DeformableDETR(nn.Module):
         query_embeds = None
         if not self.two_stage:
             query_embeds = self.query_embed.weight
-        hs, init_reference, inter_references, enc_outputs_class, enc_outputs_coord_unact = self.transformer(srcs, masks, pos, query_embeds)
+        hs, init_reference, inter_references, enc_outputs_class, enc_outputs_coord_unact = \
+            self.transformer(srcs, masks, pos, query_embeds)
         # hs.shape=[num_layers, B, num_queries, 256]
         # init_reference.shape=[B, num_queries, 2]
         # inter_references.shape=[num_layers, B, num_queries, 2]
@@ -185,7 +186,7 @@ class DeformableDETR(nn.Module):
                 reference = inter_references[lvl - 1]
             reference = inverse_sigmoid(reference)
             outputs_class = self.class_embed[lvl](hs[lvl])
-            tmp = self.bbox_embed[lvl](hs[lvl])
+            tmp = self.bbox_embed[lvl](hs[lvl])  # regress offset; reference points are "anchors"
             if reference.shape[-1] == 4:
                 tmp += reference
             else:
@@ -197,7 +198,7 @@ class DeformableDETR(nn.Module):
         outputs_class = torch.stack(outputs_classes)
         outputs_coord = torch.stack(outputs_coords)
         # outputs_class: shape=[num_layers, B, num_queries, 91]
-        # outputs_coord: shape=[num_layers, B, num_queries, 4]
+        # outputs_coord: shape=[num_layers, B, num_queries, 4]; within (0, 1)
 
         out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1]}
         if self.aux_loss:
